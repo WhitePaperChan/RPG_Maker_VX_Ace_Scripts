@@ -3,8 +3,19 @@
 # =============================================================================
 # Робить екран меню більш пристосованим під гру з одн_ією геро_їнею.
 #
-# Портрет геро_їні має знаходитися в папці Pictures, назва має бути у форматі 
-# НазваГрафікиОбличчя-НомерОбличчя (починаючи з 1), а формат має бути png.
+# Пріоритет джерел інформації про портрет:
+# 1) функція зміни портрету (xoffset і yoffset необов'язкові):
+#     change_menu_portrait(actor_id, filename, xoffset, yoffset)
+# 2) нотатка геро_їні
+#     <portrait_menu: filename>
+#     <portrait_menu_xoffset: xoffset>
+#     <portrait_menu_xoffset: yoffset>
+# 3) назва обличчя геро_їні, стандартний зсув
+#
+# Портрет геро_їні має знаходитися в папці Pictures, а формат має бути png.
+#
+# Якщо портрет задається назвою обличчя героїні, назва має бути у форматі 
+# НазваГрафікиОбличчя-НомерОбличчя (починаючи з 1).
 # 
 # Технічні подробиці:
 # Цей скрипт:
@@ -12,11 +23,21 @@
 # * змінює метод draw_item класу Window_MenuStatus,
 # * змінює метод item_height класу Window_MenuStatus,
 # * змінює метод draw_actor_simple_status класу Window_MenuStatus,
+# * змінює метод setup класу Game_Actor,
+#
 # * додає метод draw_actor_exp класу Window_MenuStatus,
 # * додає метод portrait_name класу Window_MenuStatus,
 # * додає метод draw_actor_portrait класу Window_MenuStatus,
 # * додає метод draw_parameters класу Window_MenuStatus,
-# * додає метод draw_equipments класу Window_MenuStatus.
+# * додає метод draw_equipments класу Window_MenuStatus,
+#
+# * додає метод portrait_xoffset_setup класу Game_Actor,
+# * додає метод portrait_yoffset_setup класу Game_Actor,
+# * додає атрибут menu_portrait класу Game_Actor,
+# * додає атрибут menu_portrait_xoffset класу Game_Actor,
+# * додає атрибут menu_portrait_yoffset класу Game_Actor,
+#
+# * додає функцію change_menu_portrait.
 #
 # =============================================================================
 # Ліцензія
@@ -49,10 +70,10 @@
 # =============================================================================
 
 # =============================================================================
-# Зсув графіки портрету у пікселях
+# Стандартний зсув графіки портрету у пікселях
 # =============================================================================
 
-WP_ONEPERSON_OFFSET_X = 20
+WP_ONEPERSON_OFFSET_X = 120
 WP_ONEPERSON_OFFSET_Y = 25
 
 # =============================================================================
@@ -71,6 +92,50 @@ WP_ONEPERSON_EXP_GAUGE_COLOR2 = 13
 # =============================================================================
 # Кінець налаштувань
 # =============================================================================
+
+class Game_Actor < Game_Battler
+  #--------------------------------------------------------------------------
+  # * Public Instance Variables
+  #--------------------------------------------------------------------------
+  attr_accessor   :menu_portrait
+  attr_accessor   :menu_portrait_xoffset
+  attr_accessor   :menu_portrait_yoffset
+  #--------------------------------------------------------------------------
+  # * Object Initialization
+  #--------------------------------------------------------------------------
+  alias_method "wp_OnePerson_Actor_setup", :setup
+  def setup(actor_id)
+    wp_OnePerson_Actor_setup(actor_id)
+    @menu_portrait = nil
+    @menu_portrait_xoffset = portrait_xoffset_setup
+    @menu_portrait_yoffset = portrait_yoffset_setup
+  end
+  
+  def portrait_xoffset_setup
+    xoffset_note = actor.note.match(/<portrait_menu_xoffset: *(-?\d*)>/m)
+    if (xoffset_note)
+      xoffset_note[1].to_i
+    else 
+      WP_ONEPERSON_OFFSET_X
+    end
+  end
+  
+  def portrait_yoffset_setup
+    yoffset_note = actor.note.match(/<portrait_menu_yoffset: *(-?\d*)>/m)
+    if (yoffset_note)
+      yoffset_note[1].to_i
+    else 
+      WP_ONEPERSON_OFFSET_Y
+    end
+  end
+end
+
+def change_menu_portrait(actor_id, filename, xoffset = WP_ONEPERSON_OFFSET_X, yoffset = WP_ONEPERSON_OFFSET_Y)
+  $game_actors[actor_id].menu_portrait = filename
+  $game_actors[actor_id].menu_portrait_xoffset = xoffset
+  $game_actors[actor_id].menu_portrait_yoffset = yoffset
+end
+
 class Scene_Menu < Scene_MenuBase
   def command_personal
     on_personal_ok
@@ -124,7 +189,17 @@ class Window_MenuStatus < Window_Selectable
   end
   
   def portrait_name(actor)
-    actor.face_name + "-" + (actor.face_index + 1).to_s
+    if (actor.menu_portrait)
+      actor.menu_portrait
+    else 
+      portrait_note = actor.actor.note.match(/<portrait_menu: *(.*)>/m)
+      if (portrait_note)
+        actor.menu_portrait = portrait_note[1]
+        portrait_note[1]
+      else
+        actor.face_name + "-" + (actor.face_index + 1).to_s
+      end
+    end
   end
   
   def draw_actor_portrait(actor)
@@ -132,8 +207,8 @@ class Window_MenuStatus < Window_Selectable
       bitmap = Cache.picture(portrait_name(actor))
       rect = Rect.new(0, 0, bitmap.width, bitmap.height)
       contents.blt(
-        self.width - bitmap.width - standard_padding + WP_ONEPERSON_OFFSET_X, 
-        self.height - bitmap.height - standard_padding + WP_ONEPERSON_OFFSET_Y, 
+        self.width - bitmap.width - standard_padding + actor.menu_portrait_xoffset, 
+        self.height - bitmap.height - standard_padding + actor.menu_portrait_yoffset, 
         bitmap, 
         rect, 
         255)
